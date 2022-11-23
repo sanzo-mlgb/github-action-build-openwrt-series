@@ -1,0 +1,97 @@
+name: Build OpenWRT Package
+
+on:
+  repository_dispatch:
+  workflow_dispatch:
+    inputs:
+      ssh:
+        description: 'SSH connection to Actions'
+        required: false
+        default: 'false'
+        
+env:
+  # 这里填入你的SDK的地址，在https://downloads.openwrt.org/releases/中找到你的OpenWRT版本的SDK
+  SDK_URL: https://downloads.openwrt.org/releases/22.03.2/targets/x86/64/openwrt-sdk-22.03.2-x86-64_gcc-11.2.0_musl.Linux-x86_64.tar.xz
+  # 这里填入你的设备的配置文件
+  CONFIG_FILE: device/x86-64.config
+  # 这里填入要编译包的信息
+  PACKAGE_REPO: https://github.com/yichya/luci-app-xray.git
+  PACKAGE_NAME: luci-app-xray
+  PACKAGE_BRANCH: master
+  # 下方参数保持默认即可
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@main
+
+    - name: Initialization environment
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo -E apt -qq update
+        sudo -E apt -qq full-upgrade -y
+        sudo -E apt -qq install $(curl -fsSL git.io/depends-ubuntu-2004)
+        sudo -E apt -qq autoremove --purge
+        sudo -E apt -qq clean
+        sudo timedatectl set-timezone "$TZ"
+        sudo mkdir -p /workdir
+        sudo chown $USER:$GROUPS /workdir
+        
+    - name: Download OpenWRT SDK
+      working-directory: /workdir
+      run: |
+        wget $SDK_URL -O sdk.tar.xz
+        mkdir src
+        tar -xf sdk.tar.xz -C src --strip-components 1
+        ln -sf /workdir/src $GITHUB_WORKSPACE/src
+        
+    - name: Clone Package Code
+      working-directory: /workdir/src
+      run: |
+        git clone -b $PACKAGE_BRANCH $PACKAGE_REPO package/$PACKAGE_NAME
+
+    - name: Update feeds
+      run: cd src && ./scripts/feeds update -a
+
+    - name: Install feeds
+      run: cd src && ./scripts/feeds install -a
+      
+    - name: Load custom configuration
+      run: |
+        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE src/.config
+        
+    - name: SSH connection to Actions
+      uses: P3TERX/ssh2actions@v1.0.0
+      if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
+
+    - name: Modify configuration
+      run: |
+        cd src && make defconfig
+        sed -i '/CONFIG_DEFAULT/'d .config
+        cat .config
+    
+    - name: Download dl library
+      run: |
+        cd src
+        echo -e "$(nproc) thread compile"
+        make download -j$(nproc) || make download -j1
+        find dl -size -1024c -exec ls -l {} \;
+        find dl -size -1024c -exec rm -f {} \;
+
+    - name: Compile The Package
+      id: compile
+      run: |
+        cd src
+        echo -e "$(nproc) thread compile"
+        make package/$PACKAGE_NAME/compile -j$(nproc) || make package/$PACKAGE_NAME/compile -j1 || make package/$PACKAGE_NAME/compile -j1 V=s
+
+    - name: Upload Bin Directory
+      uses: actions/upload-artifact@main
+      with:
+        name: bin
+        path: src/bin
