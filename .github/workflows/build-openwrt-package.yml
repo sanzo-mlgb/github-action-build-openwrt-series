@@ -11,9 +11,9 @@ on:
         
 env:
   # 这里填入你的SDK的地址，在https://downloads.openwrt.org/releases/中找到你的OpenWRT版本的SDK
-  SDK_URL: https://downloads.openwrt.org/releases/22.03.2/targets/x86/64/openwrt-sdk-22.03.2-x86-64_gcc-11.2.0_musl.Linux-x86_64.tar.xz
+  SDK_URL: https://downloads.openwrt.org/releases/22.03.0/targets/ramips/mt7621/openwrt-sdk-22.03.0-ramips-mt7621_gcc-11.2.0_musl.Linux-x86_64.tar.xz
   # 这里填入你的设备的配置文件
-  CONFIG_FILE: device/x86-64.config
+  CONFIG_FILE: device/rm2100.config
   # 这里填入要编译包的信息
   PACKAGE_REPO: https://github.com/yichya/luci-app-xray.git
   PACKAGE_NAME: luci-app-xray
